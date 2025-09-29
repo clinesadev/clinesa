@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String?
+  image            String?
+  stripeCustomerId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  subscriptions Subscription[]
+  patients      Patient[]
+  auditLogs     AuditLog[]
+  consents      Consent[]      @relation("Consent_user") // <— back-rel
+}
+
+model Patient {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName    String
+  email       String?
+  phone       String?
+  birthDate   DateTime?
+  notesSecure String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sessions  Session[]
+  consents  Consent[]  @relation("Consent_patient") // <— back-rel
+  auditLogs AuditLog[] @relation("AuditLog_patient") // back-rel
+}
+
+model Session {
+  id                 String        @id @default(cuid())
+  patientId          String
+  patient            Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  date               DateTime
+  noteDocSecure      String?
+  audioUrl           String?
+  audioBytesSec      Int?
+  transcriptSecure   String?
+  analysisJsonSecure String?
+  status             SessionStatus @default(DRAFT)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  auditLogs AuditLog[] @relation("AuditLog_session") // back-rel
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stripeSubId      String   @unique
+  plan             Plan     @default(PRO)
+  status           String
+  currentPeriodEnd DateTime
+}
+
+model Consent {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("Consent_user", fields: [userId], references: [id], onDelete: Cascade)
+  patientId String
+  patient   Patient   @relation("Consent_patient", fields: [patientId], references: [id], onDelete: Cascade)
+  kind      String
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+}
+
+model AuditLog {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  patientId String?
+  patient   Patient? @relation("AuditLog_patient", fields: [patientId], references: [id])
+
+  sessionId String?
+  session   Session? @relation("AuditLog_session", fields: [sessionId], references: [id])
+
+  action    String
+  meta      Json?
+  createdAt DateTime @default(now())
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum SessionStatus {
+  DRAFT
+  PROCESSING
+  READY
+  ERROR
+}
