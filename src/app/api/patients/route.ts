@@ -29,6 +29,24 @@ export async function POST(req: NextRequest) {
   const userId = await getCurrentUserId()
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  // Check patient limit
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { maxPatients: true },
+  })
+
+  if (user?.maxPatients !== null && user?.maxPatients !== undefined) {
+    const currentCount = await prisma.patient.count({ where: { userId } })
+    if (currentCount >= user.maxPatients) {
+      return NextResponse.json({
+        code: "PATIENT_LIMIT_REACHED",
+        error: `Plan SOLO limitado a ${user.maxPatients} pacientes. Actualiza a PRACTICE para pacientes ilimitados.`,
+        maxPatients: user.maxPatients,
+        currentCount,
+      }, { status: 402 })
+    }
+  }
+
   const body = await req.json()
   const { fullName, email, phone, birthDate, notes } = body
 

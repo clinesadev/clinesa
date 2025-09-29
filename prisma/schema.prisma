@@ -9,18 +9,23 @@ datasource db {
 }
 
 model User {
-  id               String   @id @default(cuid())
-  email            String   @unique
+  id               String    @id @default(cuid())
+  email            String    @unique
   name             String?
   image            String?
   stripeCustomerId String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  credits          Int       @default(0) // Créditos disponibles
+  maxPatients      Int? // NULL = ilimitado, 10 para SOLO
+  trialEndsAt      DateTime? // Fecha fin de trial (14 días)
+  trialUsed        Boolean   @default(false) // Ya usó el trial gratuito
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  subscriptions Subscription[]
-  patients      Patient[]
-  auditLogs     AuditLog[]
-  consents      Consent[]      @relation("Consent_user")
+  subscriptions      Subscription[]
+  patients           Patient[]
+  auditLogs          AuditLog[]
+  consents           Consent[]           @relation("Consent_user")
+  creditTransactions CreditTransaction[]
 
   // NextAuth relations
   accounts Account[]
@@ -52,13 +57,16 @@ model PatientSession {
   noteDocSecure      String?
   audioUrl           String?
   audioBytesSec      Int?
+  audioDurationMin   Int? // Duración en minutos (calculada)
   transcriptSecure   String?
   analysisJsonSecure String?
   status             SessionStatus @default(DRAFT)
+  creditsUsed        Int? // Créditos consumidos en análisis IA
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  auditLogs AuditLog[] @relation("AuditLog_session")
+  auditLogs         AuditLog[]         @relation("AuditLog_session")
+  creditTransaction CreditTransaction? @relation("CreditTransaction_session")
 }
 
 model Subscription {
@@ -66,7 +74,7 @@ model Subscription {
   userId           String
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   stripeSubId      String   @unique
-  plan             Plan     @default(PRO)
+  plan             Plan     @default(PROFESSIONAL)
   status           String
   currentPeriodEnd DateTime
 }
@@ -124,9 +132,35 @@ model AuthSession {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
+model CreditTransaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId String?         @unique
+  session   PatientSession? @relation("CreditTransaction_session", fields: [sessionId], references: [id], onDelete: SetNull)
+
+  type      CreditTransactionType
+  amount    Int // Positivo = añadido, Negativo = consumido
+  balance   Int // Balance después de esta transacción
+  reason    String? // "monthly_refill", "stripe_purchase", "ai_analysis", etc.
+  meta      Json? // Metadata adicional
+  createdAt DateTime              @default(now())
+
+  @@index([userId, createdAt])
+}
+
 enum Plan {
-  FREE
-  PRO
+  SOLO
+  PRACTICE
+  PROFESSIONAL
+}
+
+enum CreditTransactionType {
+  GRANT // Créditos añadidos (suscripción, compra)
+  CONSUME // Créditos consumidos (análisis IA)
+  REFUND // Reembolso
+  ADJUSTMENT // Ajuste manual
 }
 
 enum SessionStatus {
