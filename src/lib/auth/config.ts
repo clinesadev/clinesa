@@ -2,9 +2,6 @@ import NextAuth from "next-auth"
 import type { DefaultSession } from "next-auth"
 import Google from "next-auth/providers/google"
 import GitHub from "next-auth/providers/github"
-import { PrismaAdapter } from "@auth/prisma-adapter"
-import type { PrismaClient } from "@prisma-generated/index"
-import { prisma } from "@/lib/prisma"
 
 declare module "next-auth" {
   interface Session {
@@ -15,16 +12,26 @@ declare module "next-auth" {
 }
 
 export const authConfig = {
-  adapter: PrismaAdapter(prisma as unknown as PrismaClient),
-  session: { strategy: "database" as const },
+  session: {
+    strategy: "jwt" as const,
+    maxAge: 30 * 24 * 60 * 60, // 30 días
+  },
   providers: [
     ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET ? [Google] : []),
     ...(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET ? [GitHub] : []),
   ].map((P) => P({})),
   callbacks: {
-    session: async ({ session, user }) => {
-      if (session.user) {
-        session.user.id = user.id
+    jwt: async ({ token, user }) => {
+      // Al hacer login, guardar el ID del usuario en el token
+      if (user) {
+        token.id = user.id
+      }
+      return token
+    },
+    session: async ({ session, token }) => {
+      // Pasar el ID del token a la sesión
+      if (session.user && token.id) {
+        session.user.id = token.id as string
       }
       return session
     },
