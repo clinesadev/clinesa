@@ -37,7 +37,12 @@ export async function POST(req: NextRequest) {
 
   // Check billing limits
   const canCreate = await canCreateSession(userId)
-  if (!canCreate) return NextResponse.json({ error: "Session limit reached" }, { status: 403 })
+  if (!canCreate) {
+    return NextResponse.json({
+      code: "SESSION_LIMIT_REACHED",
+      error: "Has alcanzado el límite de sesiones. Actualiza tu plan para continuar.",
+    }, { status: 402 })
+  }
 
   const session = await prisma.patientSession.create({
     data: {

@@ -16,8 +16,8 @@ if (hasMigrations) {
   console.log("ℹ️  Se detectaron migraciones. Ejecutando prisma migrate deploy…")
   run("prisma migrate deploy")
 } else {
-  console.log("ℹ️  No hay migraciones. Ejecutando prisma db push (MVP)…")
-  // Usar --accept-data-loss en CI porque ya migramos manualmente en Supabase
+  console.log("⚠️  No hay migraciones. Esto no debería ocurrir en producción.")
+  console.log("ℹ️  Ejecutando prisma db push como fallback…")
   run("prisma db push --accept-data-loss --skip-generate")
 }
 

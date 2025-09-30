@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
-import { Plan, CreditTransactionType } from "@prisma/client"
+import { Plan, CreditTransactionType } from "@prisma-generated/index"
+import type { Prisma } from "@prisma-generated/index"
 
 // Costos de IA por minuto de audio (en créditos)
 // Basado en: Deepgram ($0.0125/min) + Claude (~$0.033/sesión 30min)
@@ -56,7 +57,7 @@ export async function getUserPlan(userId: string): Promise<Plan> {
     },
     orderBy: { currentPeriodEnd: "desc" },
   })
-  return subscription?.plan ?? "FREE"
+  return subscription?.plan ?? "SOLO" // Default a SOLO si no tiene suscripción
 }
 
 /**
@@ -78,7 +79,7 @@ export async function consumeCredits(params: {
   amount: number
   sessionId?: string
   reason: string
-  meta?: Record<string, unknown>
+  meta?: Prisma.InputJsonValue
 }): Promise<{ success: boolean; newBalance: number }> {
   const { userId, amount, sessionId, reason, meta } = params
 
@@ -113,7 +114,7 @@ export async function consumeCredits(params: {
           amount: -amount, // Negativo porque es consumo
           balance: newBalance,
           reason,
-          meta: meta || null,
+          meta,
         },
       })
 
@@ -142,7 +143,7 @@ export async function grantCredits(params: {
   userId: string
   amount: number
   reason: string
-  meta?: Record<string, unknown>
+  meta?: Prisma.InputJsonValue
 }): Promise<{ success: boolean; newBalance: number }> {
   const { userId, amount, reason, meta } = params
 
@@ -171,7 +172,7 @@ export async function grantCredits(params: {
           amount, // Positivo porque es añadido
           balance: newBalance,
           reason,
-          meta: meta || null,
+          meta,
         },
       })
 
@@ -233,7 +234,7 @@ export async function getCreditHistory(
  * Verifica si puede crear sesión (deprecated, ahora usa créditos)
  * Mantener para compatibilidad con código existente
  */
-export async function canCreateSession(userId: string): Promise<boolean> {
+export async function canCreateSession(_userId: string): Promise<boolean> {
   // Ahora siempre puede crear sesión (limitación es por créditos al analizar)
   return true
 }

@@ -114,11 +114,6 @@ export async function lockExpiredTrial(userId: string): Promise<void> {
   const active = await isTrialActive(userId)
   if (active) return // Trial aún activo, no bloquear
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { trialEndsAt: true, stripeCustomerId: true },
-  })
-
   // Si tiene suscripción activa, no bloquear
   const hasSub = await prisma.subscription.findFirst({
     where: {

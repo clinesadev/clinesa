@@ -28,6 +28,9 @@ export const authConfig = {
       return session
     },
   },
+  pages: {
+    signIn: "/api/auth/signin",
+  },
   trustHost: true,
   secret: process.env.AUTH_SECRET,
 } satisfies Parameters<typeof NextAuth>[0]

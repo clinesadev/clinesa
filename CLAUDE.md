@@ -67,14 +67,17 @@ src/
 
 The application uses Prisma with PostgreSQL. Key models:
 
-- **User**: Core user model with NextAuth relations (`Account`, `AuthSession`)
+- **User**: Core user model with `credits` balance, `maxPatients` limit, `trialEndsAt`/`trialUsed` for trial tracking, and NextAuth relations (`Account`, `AuthSession`)
 - **Patient**: Patient records with encrypted notes (`notesSecure`)
-- **PatientSession**: Therapy sessions with encrypted content (`noteDocSecure`, `transcriptSecure`, `analysisJsonSecure`)
-- **Subscription**: Stripe-based subscriptions with plans (FREE/PRO)
+- **PatientSession**: Therapy sessions with encrypted content (`noteDocSecure`, `transcriptSecure`, `analysisJsonSecure`) and `creditsUsed` tracking
+- **Subscription**: Stripe-based subscriptions with plans (SOLO/PRACTICE/PROFESSIONAL)
+- **CreditTransaction**: Ledger for credit grants/consumption with atomicity guarantees
 - **Consent**: Patient consent tracking
 - **AuditLog**: Comprehensive audit trail for compliance
 
-Enums: `Plan` (FREE, PRO), `SessionStatus` (DRAFT, PROCESSING, READY, ERROR)
+Enums: `Plan` (SOLO, PRACTICE, PROFESSIONAL), `SessionStatus` (DRAFT, PROCESSING, READY, ERROR), `CreditTransactionType` (GRANT, CONSUME, REFUND, ADJUSTMENT)
+
+**Important**: Prisma client is generated to `generated/prisma` directory (not default `node_modules`).
 
 ### Security Architecture
 
@@ -110,12 +113,27 @@ All API routes follow REST conventions with proper HTTP methods:
 
 All API routes enforce ownership validation using `assertOwner` before mutations.
 
-### Subscription & Billing
+### Subscription & Billing (Credit-Based System v2)
 
-- Free tier: Limited to 10 patient sessions (`FREE_MAX_SESSIONS` in `billing/limits.ts`)
-- Pro tier: Unlimited sessions
-- Subscription state managed via Stripe integration
-- Plan retrieved via `getUserPlan(userId)` from session utility
+The application uses a **credit-based pricing model** where AI analysis consumes credits:
+
+- **Credits per minute**: ~1.27 credits/min of audio (based on Deepgram + Claude API costs)
+- **Monthly credit allocation by plan**:
+  - SOLO: 250 credits/month (~6 sessions of 30min) + 10 patient limit
+  - PRACTICE: 1200 credits/month (~31 sessions)
+  - PROFESSIONAL: 3200 credits/month (~84 sessions)
+- **Trial system**: 14-day trial with 100 credits and 3 patient limit
+- **Credit operations** (via `billing/credits.ts`):
+  - `consumeCredits()`: Atomic deduction with transaction logging
+  - `grantCredits()`: Add credits (purchase, refill, trial)
+  - `getUserCredits()`: Get current balance
+  - `calculateCreditsForAudio()`: Estimate cost before processing
+- **Trial operations** (via `billing/trial.ts`):
+  - `startTrial()`: Initialize 14-day trial
+  - `isTrialActive()`: Check trial status
+  - `convertTrialToPaid()`: Upgrade to paid plan
+
+All credit operations use database transactions for consistency. The `CreditTransaction` model maintains a complete audit trail.
 
 ### Key Patterns
 
@@ -124,8 +142,9 @@ All API routes enforce ownership validation using `assertOwner` before mutations
 - **Authentication**: Use `auth()` from `lib/auth/config.ts` to get session
 - **Ownership checks**: Always call `assertOwner(user, resource)` before mutations
 - **Encrypted fields**: Use `encryptField(value)` and `decryptField(encrypted)` from `crypto.ts`
-- **Database**: Use `prisma` singleton from `lib/prisma.ts`
+- **Database**: Use `prisma` singleton from `lib/prisma.ts`. Prisma client generates to `generated/prisma/`
 - **UI state**: Zustand stores for loading/toast (`useUIStore`) and plans (`usePlanStore`)
+- **Credit consumption**: Always use `consumeCredits()` for atomic transactions with audit logging
 - **Styling**: Tailwind with dark mode ('class' strategy), shadcn/ui with slate theme
 - **i18n**: UI uses Spanish labels ("Pacientes", "Suscripción", "Ajustes")
 
@@ -140,8 +159,34 @@ Monitor application health via `/api/health/*`:
 ### Configuration Files
 
 - `components.json` - shadcn/ui with RSC, default style, slate base
-- `prisma/schema.prisma` - Database schema with pooled/direct URLs
+- `prisma/schema.prisma` - Database schema with pooled/direct URLs, generates to `generated/prisma/`
 - `tailwind.config.js` - Tailwind with dark mode and content paths
 - `tsconfig.json` - TypeScript with path aliases and strict mode
 - `next.config.ts` - Next.js configuration
 - Prettier configured with import sorting and Tailwind plugin
+- `scripts/ci-build.mjs` - CI build orchestration (prebuild checks → prisma generate → migrate/push → next build)
+- `scripts/ci-prebuild-check.mjs` - Validates DATABASE_URL (pooler:6543) and DIRECT_URL (db host:5432) format
+
+### Manual Database Operations
+
+**IMPORTANT**: Prisma migrations are not functional in this project. Database schema changes must be applied manually to Supabase:
+
+1. **Schema Reset**: Use [prisma/reset.sql](prisma/reset.sql) to drop all tables, enums, and migrations
+2. **Schema Creation**: Generate CREATE statements from `prisma/schema.prisma` and execute directly in Supabase SQL editor
+3. **Schema Changes**: When modifying the schema:
+   - Update `prisma/schema.prisma`
+   - Generate full DROP and CREATE SQL scripts
+   - Apply manually to Supabase
+   - Run `npm run prisma:generate` to update TypeScript client
+
+Scripts available:
+- `scripts/reset-database.mjs` - Automated reset workflow
+- `scripts/check-tables.mjs` - Verify current database state
+
+**Never use `prisma migrate` or `prisma db push`** - these commands will fail or produce inconsistent state.
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
