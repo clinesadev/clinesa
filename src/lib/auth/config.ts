@@ -3,6 +3,7 @@ import type { DefaultSession } from "next-auth"
 import Google from "next-auth/providers/google"
 import GitHub from "next-auth/providers/github"
 import { PrismaAdapter } from "@auth/prisma-adapter"
+import type { PrismaClient } from "@prisma-generated/index"
 import { prisma } from "@/lib/prisma"
 
 declare module "next-auth" {
@@ -14,7 +15,7 @@ declare module "next-auth" {
 }
 
 export const authConfig = {
-  adapter: PrismaAdapter(prisma),
+  adapter: PrismaAdapter(prisma as unknown as PrismaClient),
   session: { strategy: "database" as const },
   providers: [
     ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET ? [Google] : []),
