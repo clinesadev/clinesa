@@ -9,16 +9,9 @@ function run(cmd) {
 run("node scripts/ci-prebuild-check.mjs")
 run("prisma generate")
 
-const hasMigrations = existsSync("prisma/migrations") &&
-  readdirSync("prisma/migrations").filter((d) => d !== ".cache").length > 0
-
-if (hasMigrations) {
-  console.log("ℹ️  Se detectaron migraciones. Ejecutando prisma migrate deploy…")
-  run("prisma migrate deploy")
-} else {
-  console.log("⚠️  No hay migraciones. Esto no debería ocurrir en producción.")
-  console.log("ℹ️  Ejecutando prisma db push como fallback…")
-  run("prisma db push --accept-data-loss --skip-generate")
-}
+// El schema se aplica manualmente en Supabase usando prisma/sql/*.sql
+// No usamos migraciones de Prisma porque no funcionan correctamente con Supabase
+console.log("ℹ️  Schema gestionado manualmente en Supabase (ver prisma/sql/*.sql)")
+console.log("✅ Prisma client generado correctamente")
 
 run("next build")
